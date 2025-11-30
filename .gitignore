@@ -16,3 +16,5 @@ __pycache__/
 scripts/setup-gcloud-permissions.sh
 plan.md
 spec.md
+scripts/setup-secrets.sh
+review.md

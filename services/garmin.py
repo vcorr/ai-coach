@@ -1,10 +1,11 @@
-import os
 import logging
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
 from garminconnect import Garmin
+
+from services.secrets import get_garmin_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +37,11 @@ class GarminService:
             If this returns True, self.client is guaranteed to be a valid, 
             authenticated Garmin instance. If False, self.client is None.
         """
-        email = email or os.getenv("GARMIN_EMAIL")
-        password = password or os.getenv("GARMIN_PASSWORD")
+        # Get credentials from secrets (Secret Manager or env vars)
+        if not email or not password:
+            secret_email, secret_password = get_garmin_credentials()
+            email = email or secret_email
+            password = password or secret_password
 
         # Try to resume from stored tokens first
         if TOKEN_DIR.exists():
@@ -60,9 +64,13 @@ class GarminService:
             client = Garmin(email, password)
             client.login()
             # Save tokens for future use
-            client.garth.dump(str(TOKEN_DIR))
+            try:
+                TOKEN_DIR.mkdir(parents=True, exist_ok=True)
+                client.garth.dump(str(TOKEN_DIR))
+            except OSError as e:
+                logger.warning(f"Could not persist tokens (non-fatal): {e}")
             self.client = client
-            logger.info("Fresh login successful, tokens saved")
+            logger.info("Fresh login successful")
             return True
         except Exception as e:
             logger.error(f"Login failed: {e}")

@@ -14,6 +14,7 @@ RUN uv sync --frozen --no-dev --compile-bytecode
 
 # Copy application code
 COPY main.py ./
+COPY services/ ./services/
 
 # Expose port (Cloud Run uses PORT env var, default 8080)
 EXPOSE 8080
