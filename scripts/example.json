@@ -1,0 +1,90 @@
+{
+    "today_stats": {
+        "date": "2025-12-01",
+        "body": {
+            "resting_hr": 48,
+            "resting_hr_7day_avg": 49,
+            "body_battery": {
+                "current": 78,
+                "charged": 57,
+                "drained": 4,
+                "high": 82,
+                "low": 25
+            },
+            "stress": {
+                "avg": 15,
+                "max": 58,
+                "high_duration_seconds": null
+            }
+        },
+        "sleep": {
+            "date": "2025-12-01",
+            "score": 80,
+            "quality": "GOOD",
+            "duration_hours": 7.6,
+            "feedback": "Long sleep but not enough REM",
+            "stages": {
+                "deep": {
+                    "pct": 15,
+                    "quality": "FAIR"
+                },
+                "light": {
+                    "pct": 75,
+                    "quality": "FAIR"
+                },
+                "rem": {
+                    "pct": 10,
+                    "quality": "POOR"
+                },
+                "awake": {
+                    "pct": 3,
+                    "quality": "EXCELLENT"
+                }
+            }
+        },
+        "recovery": {
+            "score": 83,
+            "level": "HIGH",
+            "feedback": "EXCELLENT_RECOVERY",
+            "recovery_time_hours": 107,
+            "hrv_weekly_avg": 28,
+            "factors": {
+                "sleep": "GOOD",
+                "recovery_time": "GOOD",
+                "training_load": "VERY_GOOD"
+            }
+        }
+    },
+    "recent_activities": [
+        {
+            "date": "2025-11-30 15:34:01",
+            "type": "running",
+            "name": "Testing",
+            "duration_minutes": 45.0
+        },
+        {
+            "date": "2025-11-29 12:38:46",
+            "type": "running",
+            "name": "Place - 4x4",
+            "duration_minutes": 27.1
+        },
+        {
+            "date": "2025-11-29 11:30:22",
+            "type": "strength_training",
+            "name": "Strength",
+            "duration_minutes": 3.7
+        },
+        {
+            "date": "2025-11-27 18:37:08",
+            "type": "strength_training",
+            "name": "Strength",
+            "duration_minutes": 30.4
+        },
+        {
+            "date": "2025-11-25 18:37:58",
+            "type": "running",
+            "name": "Place - Tempo",
+            "duration_minutes": 27.4
+        }
+    ]
+}

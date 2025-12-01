@@ -13,6 +13,30 @@ logger = logging.getLogger(__name__)
 TOKEN_DIR = Path.home() / ".garminconnect"
 
 
+def _humanize_sleep_feedback(feedback: str) -> str | None:
+    """Convert Garmin's sleep feedback codes to human-readable text."""
+    if not feedback:
+        return None
+    
+    # Map known feedback codes to readable descriptions
+    feedback_map = {
+        "POSITIVE_LONG_AND_DEEP": "Long sleep with good deep sleep",
+        "POSITIVE_SHORT_BUT_DEEP": "Short but restorative with good deep sleep",
+        "POSITIVE_OVERALL_GOOD": "Good overall sleep quality",
+        "NEGATIVE_LONG_BUT_NOT_ENOUGH_REM": "Long sleep but not enough REM",
+        "NEGATIVE_LONG_BUT_NOT_ENOUGH_DEEP": "Long sleep but not enough deep sleep",
+        "NEGATIVE_SHORT_AND_LIGHT": "Short and light sleep",
+        "NEGATIVE_TOO_MUCH_AWAKE": "Too much time awake during the night",
+        "NEGATIVE_RESTLESS": "Restless sleep",
+    }
+    
+    if feedback in feedback_map:
+        return feedback_map[feedback]
+    
+    # Fallback: convert SCREAMING_SNAKE_CASE to readable text
+    return feedback.replace("_", " ").lower().capitalize()
+
+
 class GarminService:
     """Service for interacting with Garmin Connect API."""
 
@@ -91,8 +115,10 @@ class GarminService:
         """
         Get today's key health metrics for coaching decisions.
         
-        Returns:
-            Dict with body_battery, sleep_score, hrv_status, training_readiness
+        Returns structured data optimized for LLM understanding:
+        - body: Core physiological metrics (resting HR, body battery, stress)
+        - sleep: Sleep quality and stage breakdown
+        - recovery: Training readiness and recovery time
         """
         if not self.client:
             return {"error": "Not logged in"}
@@ -100,22 +126,33 @@ class GarminService:
         today = date.today().isoformat()
         stats: dict[str, Any] = {"date": today}
 
-        # Body Battery
+        # === BODY: Physiological metrics from user summary ===
         try:
-            bb_data = self.client.get_body_battery(today)
-            if bb_data and len(bb_data) > 0:
-                # Get the most recent reading
-                latest = bb_data[-1] if isinstance(bb_data, list) else bb_data
-                stats["body_battery"] = latest.get("bodyBatteryLevel") or latest.get("charged")
+            summary = self.client.get_user_summary(today)
+            if summary:
+                stats["body"] = {
+                    "resting_hr": summary.get("restingHeartRate"),
+                    "resting_hr_7day_avg": summary.get("lastSevenDaysAvgRestingHeartRate"),
+                    "body_battery": {
+                        "current": summary.get("bodyBatteryMostRecentValue"),
+                        "charged": summary.get("bodyBatteryChargedValue"),
+                        "drained": summary.get("bodyBatteryDrainedValue"),
+                        "high": summary.get("bodyBatteryHighestValue"),
+                        "low": summary.get("bodyBatteryLowestValue"),
+                    },
+                    "stress": {
+                        "avg": summary.get("averageStressLevel"),
+                        "max": summary.get("maxStressLevel"),
+                        "high_duration_seconds": summary.get("highStressDuration"),
+                    },
+                }
         except Exception as e:
-            logger.warning(f"Failed to get body battery: {e}")
-            stats["body_battery"] = None
+            logger.warning(f"Failed to get user summary: {e}")
+            stats["body"] = None
 
-        # Sleep Score - look back up to 7 days to find most recent
+        # === SLEEP: Look back up to 7 days to find most recent ===
         try:
-            stats["sleep_score"] = None
-            stats["sleep_hours"] = None
-            stats["sleep_date"] = None
+            stats["sleep"] = None
             
             for days_ago in range(7):
                 check_date = (date.today() - timedelta(days=days_ago)).isoformat()
@@ -124,46 +161,62 @@ class GarminService:
                     daily_sleep = sleep_data.get("dailySleepDTO") or {}
                     sleep_seconds = daily_sleep.get("sleepTimeSeconds")
                     if sleep_seconds and sleep_seconds > 0:
-                        stats["sleep_score"] = daily_sleep.get("sleepScores", {}).get("overall", {}).get("value")
-                        stats["sleep_hours"] = round(sleep_seconds / 3600, 1)
-                        stats["sleep_date"] = check_date
-                        # Sleep stage percentages
-                        deep = daily_sleep.get("deepSleepSeconds") or 0
-                        light = daily_sleep.get("lightSleepSeconds") or 0
-                        rem = daily_sleep.get("remSleepSeconds") or 0
-                        awake = daily_sleep.get("awakeSleepSeconds") or 0
-                        stats["deep_sleep_pct"] = round(deep / sleep_seconds * 100)
-                        stats["light_sleep_pct"] = round(light / sleep_seconds * 100)
-                        stats["rem_sleep_pct"] = round(rem / sleep_seconds * 100)
-                        stats["awake_pct"] = round(awake / sleep_seconds * 100)
+                        scores = daily_sleep.get("sleepScores") or {}
+                        raw_feedback = daily_sleep.get("sleepScoreFeedback") or ""
+                        
+                        stats["sleep"] = {
+                            "date": check_date,
+                            "score": scores.get("overall", {}).get("value"),
+                            "quality": scores.get("overall", {}).get("qualifierKey"),
+                            "duration_hours": round(sleep_seconds / 3600, 1),
+                            "feedback": _humanize_sleep_feedback(raw_feedback),
+                            "stages": {
+                                "deep": {
+                                    "pct": round((daily_sleep.get("deepSleepSeconds") or 0) / sleep_seconds * 100),
+                                    "quality": scores.get("deepPercentage", {}).get("qualifierKey"),
+                                },
+                                "light": {
+                                    "pct": round((daily_sleep.get("lightSleepSeconds") or 0) / sleep_seconds * 100),
+                                    "quality": scores.get("lightPercentage", {}).get("qualifierKey"),
+                                },
+                                "rem": {
+                                    "pct": round((daily_sleep.get("remSleepSeconds") or 0) / sleep_seconds * 100),
+                                    "quality": scores.get("remPercentage", {}).get("qualifierKey"),
+                                },
+                                "awake": {
+                                    "pct": round((daily_sleep.get("awakeSleepSeconds") or 0) / sleep_seconds * 100),
+                                    "quality": scores.get("awakeCount", {}).get("qualifierKey"),
+                                },
+                            },
+                        }
                         break
         except Exception as e:
             logger.warning(f"Failed to get sleep data: {e}")
-            stats["sleep_score"] = None
-            stats["sleep_hours"] = None
+            stats["sleep"] = None
 
-        # HRV Status
+        # === RECOVERY: Training readiness and recovery metrics ===
         try:
-            hrv_data = self.client.get_hrv_data(today)
-            if hrv_data:
-                stats["hrv_status"] = hrv_data.get("hrvSummary", {}).get("status")
-                stats["hrv_value"] = hrv_data.get("hrvSummary", {}).get("lastNightAvg")
-        except Exception as e:
-            logger.warning(f"Failed to get HRV data: {e}")
-            stats["hrv_status"] = None
-            stats["hrv_value"] = None
-
-        # Training Readiness
-        try:
-            stats["training_readiness"] = None
-            stats["training_readiness_level"] = None
+            stats["recovery"] = None
             tr_data = self.client.get_training_readiness(today)
             if tr_data and len(tr_data) > 0:
-                latest = tr_data[-1] if isinstance(tr_data, list) else tr_data
-                stats["training_readiness"] = latest.get("score")
-                stats["training_readiness_level"] = latest.get("level")
+                # Get the most recent reading (first item is usually most recent)
+                latest = tr_data[0] if isinstance(tr_data, list) else tr_data
+                recovery_minutes = latest.get("recoveryTime") or 0
+                stats["recovery"] = {
+                    "score": latest.get("score"),
+                    "level": latest.get("level"),
+                    "feedback": latest.get("feedbackShort"),
+                    "recovery_time_hours": round(recovery_minutes / 60, 1) if recovery_minutes else None,
+                    "hrv_weekly_avg": latest.get("hrvWeeklyAverage"),
+                    "factors": {
+                        "sleep": latest.get("sleepScoreFactorFeedback"),
+                        "recovery_time": latest.get("recoveryTimeFactorFeedback"),
+                        "training_load": latest.get("acwrFactorFeedback"),
+                    },
+                }
         except Exception as e:
             logger.warning(f"Failed to get training readiness: {e}")
+            stats["recovery"] = None
 
         return stats
 
