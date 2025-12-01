@@ -19,7 +19,7 @@ app = FastAPI(title="AI Hybrid Athlete Coach")
 
 @app.get("/")
 async def root() -> dict[str, str]:
-    return {"message": "AI Coach is running"}
+    return {"message": "AI Coach is running", "version": "0.2.0"}
 
 
 @app.get("/health")
