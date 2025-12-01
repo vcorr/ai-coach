@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  PROJECT_ID: ai-coach-hybrid
+  PROJECT_ID: meal-app-6f9e5
   REGION: europe-north1
   SERVICE: ai-coach
 
